@@ -3,14 +3,14 @@ import selectors
 
 sel = selectors.DefaultSelector()
 clientes = {}
-
+PUERTO = 8081
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(("localhost", 8080))
+server.bind(("localhost", PUERTO))
 server.listen()
 server.setblocking(False)
 
 sel.register(server, selectors.EVENT_READ)
-print("🟢 Servidor de chat escuchando en 8080")
+print(f"🟢 Servidor de chat escuchando en {PUERTO}")
 
 def broadcast(mensaje, origen=None):
     for sock in list(clientes):
@@ -30,7 +30,7 @@ def desconectar(sock):
 
 try:
     while True:
-        eventos = sel.select()
+        eventos = sel.select(1)
 
         for key, _ in eventos:
             if key.fileobj is server:
