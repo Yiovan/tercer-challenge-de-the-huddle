@@ -1,31 +1,61 @@
 import socket
+import selectors
 
-# Crear socket
+sel = selectors.DefaultSelector()
+clientes = {}
+
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(('localhost', 8080))
-server.listen(1)
-print("Servidor esperando conexiones...")
+server.bind(("localhost", 8080))
+server.listen()
+server.setblocking(False)
 
-# Aceptar conexión
-cliente, direccion = server.accept()
-print(f"Cliente conectado desde {direccion}")
+sel.register(server, selectors.EVENT_READ)
+print("🟢 Servidor de chat escuchando en 8080")
 
-while True:
-    # RECIBIR mensaje del cliente
-    mensaje = cliente.recv(1024).decode('utf-8')
-    
-    if not mensaje or mensaje.lower() == 'salir':
-        print("Cliente desconectado")
-        break
-    
-    print(f"Cliente: {mensaje}")
-    
-    # ENVIAR respuesta al cliente
-    respuesta = input("Tú: ")
-    cliente.send(respuesta.encode('utf-8'))
-    
-    if respuesta.lower() == 'salir':
-        break
+def broadcast(mensaje, origen=None):
+    for sock in list(clientes):
+        if sock != origen:
+            try:
+                sock.sendall(mensaje)
+            except OSError:
+                desconectar(sock)
 
-cliente.close()
-server.close()
+def desconectar(sock):
+    addr = clientes.get(sock, "desconocido")
+    print(f"🔴 Cliente desconectado: {addr}")
+    sel.unregister(sock)
+    sock.close()
+    clientes.pop(sock, None)
+    broadcast(f"[SERVIDOR] {addr} salió del chat\n".encode())
+
+try:
+    while True:
+        eventos = sel.select()
+
+        for key, _ in eventos:
+            if key.fileobj is server:
+                cliente, addr = server.accept()
+                cliente.setblocking(False)
+                sel.register(cliente, selectors.EVENT_READ)
+                clientes[cliente] = addr
+                print(f"🟢 Cliente conectado: {addr}")
+                broadcast(f"[SERVIDOR] {addr} entró al chat\n".encode())
+
+            else:
+                sock = key.fileobj
+                try:
+                    data = sock.recv(1024)
+                    if not data:
+                        desconectar(sock)
+                    else:
+                        mensaje = f"{clientes[sock]}: ".encode() + data
+                        broadcast(mensaje, origen=sock)
+
+                except OSError:
+                    desconectar(sock)
+
+except KeyboardInterrupt:
+    print("\n🛑 Cerrando servidor...")
+    for sock in list(clientes):
+        sock.close()
+    server.close()
