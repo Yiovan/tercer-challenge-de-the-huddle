@@ -1,61 +1,82 @@
 import socket
-import selectors
+import threading
 
-sel = selectors.DefaultSelector()
 clientes = {}
-PUERTO = 8081
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(("localhost", PUERTO))
-server.listen()
-server.setblocking(False)
+bloqueos = threading.Lock()
 
-sel.register(server, selectors.EVENT_READ)
-print(f"🟢 Servidor de chat escuchando en {PUERTO}")
+def broadcast(mensaje, omitir=None):
+    mensaje_bytes = mensaje.encode()
+    with bloqueos:
+        conexiones = list(clientes.keys())
 
-def broadcast(mensaje, origen=None):
-    for sock in list(clientes):
-        if sock != origen:
+    for conexion in conexiones:
+        if conexion != omitir:
             try:
-                sock.sendall(mensaje)
-            except OSError:
-                desconectar(sock)
+                conexion.sendall(mensaje_bytes)
+            except:
+                with bloqueos:
+                    if conexion in clientes:
+                        del clientes[conexion]
+                conexion.close()
 
-def desconectar(sock):
-    addr = clientes.get(sock, "desconocido")
-    print(f"🔴 Cliente desconectado: {addr}")
-    sel.unregister(sock)
-    sock.close()
-    clientes.pop(sock, None)
-    broadcast(f"[SERVIDOR] {addr} salió del chat\n".encode())
+
+def manejar_cliente(conexion, direccion):
+    try:
+        # El primer mensaje que recibimos será el nombre
+        nombre = conexion.recv(1024).decode().strip()
+        
+        with bloqueos:
+            clientes[conexion] = nombre
+        
+        print(f"🟢 {nombre} se ha unido desde {direccion}")
+        broadcast(f"📢 {nombre} ha entrado al chat")
+
+        while True:
+            datos = conexion.recv(1024)
+            if not datos: break
+            
+            texto = datos.decode().strip()
+
+            if texto == "/salir":
+                print(f"🔴 {nombre} solicitó salir")
+                break
+
+            mensaje_formateado = f"{nombre}: {texto}"
+            print(mensaje_formateado)
+            broadcast(mensaje_formateado, omitir=conexion)
+
+
+    except Exception as e:
+        print(f"❌ Error con cliente: {e}")
+
+    finally:
+        nombre_salir = None
+
+        with bloqueos:
+            if conexion in clientes:
+                nombre_salir = clientes[conexion]
+                del clientes[conexion]
+
+        if nombre_salir:
+            broadcast(f"🔴 {nombre_salir} ha salido")
+
+        conexion.close()
+
+
+# ===== SERVIDOR =====
+
+servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+servidor.bind(('localhost', 8081))
+servidor.listen()
+
+print("🟢 Servidor esperando nombres en puerto 8081")
 
 try:
     while True:
-        eventos = sel.select(1)
-
-        for key, _ in eventos:
-            if key.fileobj is server:
-                cliente, addr = server.accept()
-                cliente.setblocking(False)
-                sel.register(cliente, selectors.EVENT_READ)
-                clientes[cliente] = addr
-                print(f"🟢 Cliente conectado: {addr}")
-                broadcast(f"[SERVIDOR] {addr} entró al chat\n".encode())
-
-            else:
-                sock = key.fileobj
-                try:
-                    data = sock.recv(1024)
-                    if not data:
-                        desconectar(sock)
-                    else:
-                        mensaje = f"{clientes[sock]}: ".encode() + data
-                        broadcast(mensaje, origen=sock)
-
-                except OSError:
-                    desconectar(sock)
-
+        conexion, direccion = servidor.accept()
+        threading.Thread(target=manejar_cliente, args=(conexion, direccion), daemon=True).start()
 except KeyboardInterrupt:
-    print("\n🛑 Cerrando servidor...")
-    for sock in list(clientes):
-        sock.close()
-    server.close()
+    print("\n🛑 Servidor apagado")
+finally:
+    servidor.close()
