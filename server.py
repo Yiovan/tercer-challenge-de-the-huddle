@@ -6,8 +6,8 @@ bloqueos = threading.Lock()
 
 def broadcast(mensaje, omitir=None):
     mensaje_bytes = mensaje.encode()
-    with bloqueos:
-        conexiones = list(clientes.keys())
+    with bloqueos: #es un candado para que dos hilos no toquen lo mismo al mismo tiempo.
+        conexiones = list(clientes.keys()) #
 
     for conexion in conexiones:
         if conexion != omitir:
@@ -75,7 +75,11 @@ print("🟢 Servidor esperando nombres en puerto 8081")
 try:
     while True:
         conexion, direccion = servidor.accept()
-        threading.Thread(target=manejar_cliente, args=(conexion, direccion), daemon=True).start()
+        threading.Thread(
+            target=manejar_cliente,
+            args=(conexion, direccion), 
+            daemon=True
+            ).start()
 except KeyboardInterrupt:
     print("\n🛑 Servidor apagado")
 finally:
