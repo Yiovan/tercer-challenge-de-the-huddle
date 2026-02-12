@@ -18,7 +18,7 @@ def broadcast(mensaje, omitir=None):
                     if conexion in clientes:
                         del clientes[conexion]
                 conexion.close()
-
+        print(conexion)
 
 def manejar_cliente(conexion, direccion):
     try:
