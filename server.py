@@ -2,7 +2,7 @@ import socket
 import threading
 
 clientes = {}
-bloqueos = threading.Lock()
+bloqueos = threading.Lock() #se genera un candado
 
 def broadcast(mensaje, omitir=None):
     mensaje_bytes = mensaje.encode()
@@ -10,7 +10,7 @@ def broadcast(mensaje, omitir=None):
         conexiones = list(clientes.keys()) #
 
     for conexion in conexiones:
-        if conexion != omitir:
+        if conexion != omitir: 
             try:
                 conexion.sendall(mensaje_bytes)
             except:
@@ -18,15 +18,14 @@ def broadcast(mensaje, omitir=None):
                     if conexion in clientes:
                         del clientes[conexion]
                 conexion.close()
-
+             #lo que hace es que envia a todos el mensaje y despues
 
 def manejar_cliente(conexion, direccion):
     try:
         # El primer mensaje que recibimos será el nombre
         nombre = conexion.recv(1024).decode().strip()
         
-        with bloqueos:
-            clientes[conexion] = nombre
+        with bloqueos: clientes[conexion] = nombre
         
         print(f"🟢 {nombre} se ha unido desde {direccion}")
         broadcast(f"📢 {nombre} ha entrado al chat")
@@ -61,26 +60,27 @@ def manejar_cliente(conexion, direccion):
             broadcast(f"🔴 {nombre_salir} ha salido")
 
         conexion.close()
-
-
-# ===== SERVIDOR =====
-
 servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
 servidor.bind(('localhost', 8081))
 servidor.listen()
+servidor.settimeout(1)
 
-print("🟢 Servidor esperando nombres en puerto 8081")
+
+print("Servidor esperando nombres en puerto 8081")
 
 try:
     while True:
-        conexion, direccion = servidor.accept()
-        threading.Thread(
-            target=manejar_cliente,
-            args=(conexion, direccion), 
+        try:
+            conexion, direccion = servidor.accept()
+        except:
+            continue
+        threading.Thread( #crea el hilo
+            target=manejar_cliente, #llama a la funcion que va usar 
+            args=(conexion, direccion),  
             daemon=True
             ).start()
 except KeyboardInterrupt:
-    print("\n🛑 Servidor apagado")
+    print("\nServidor apagado y/o caido")
 finally:
     servidor.close()

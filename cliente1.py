@@ -2,12 +2,10 @@ import socket
 import threading
 import time
 
-# ══════════════════════════════════════════
-#  CONFIGURACIÓN
-# ══════════════════════════════════════════
+
 HOST = "localhost"
 PORT = 8081
-REINTENTOS_CONEXION = 5      # cuántas veces intenta conectarse al inicio
+REINTENTOS_CONEXION = 5       # cuántas veces intenta conectarse al inicio
 ESPERA_REINTENTO    = 3      # segundos entre cada intento
 ESPERA_RECONEXION   = 5      # segundos antes de reconectarse si se cae a mitad
 
@@ -20,10 +18,9 @@ def recibir(sock, evento_caido):
                 print("\n🔴 El servidor cerró la conexión")
                 break
             print(datos.decode())
-    except Exception:
-        pass   # la conexión se cayó de golpe
-    finally:
-        evento_caido.set()   # ← le avisa al hilo principal que pasó algo
+    except Exception: pass
+           
+    finally: evento_caido.set()   
 
 def conectar(nombre):
    
@@ -38,8 +35,7 @@ def conectar(nombre):
         except ConnectionRefusedError:
             print(f"❌ Servidor no disponible. Reintentando en {ESPERA_REINTENTO}s...")
             sock.close()
-            if intento < REINTENTOS_CONEXION:
-                time.sleep(ESPERA_REINTENTO)
+            if intento < REINTENTOS_CONEXION: time.sleep(ESPERA_REINTENTO)
 
     print(" No se pudo conectar al servidor después de varios intentos.")
     return None
@@ -49,29 +45,21 @@ def conectar(nombre):
 
 def iniciar_sesion(sock):
    
-    evento_caido = threading.Event()
+    evento_caido = threading.Event() 
 
-
-    hilo_receptor = threading.Thread( #crea el hilo, aun no hace nada 
-        target=recibir, #recibe la funcion con el que va trabajar el hilo
-        args=(sock, evento_caido), #le pasa la conexion a ESE 
-        daemon=True
-    )
+    hilo_receptor = threading.Thread(target=recibir, args=(sock, evento_caido), daemon=True)
     hilo_receptor.start()
 
     try:
-        while True:
-
-            # Si el hilo receptor detectó que la conexión se cayó,
-            # salimos del loop para que main intente reconectarse.
+        while True:     
             if evento_caido.is_set():
                 print("\n⚠️  Conexión perdida. Intentando reconectar...")
-                return False   # ← "no salí a propósito, reconéctame"
+                return False   
 
             msg = input()
 
             if evento_caido.is_set():
-                # la conexión se fue justo mientras escribíamos
+                
                 print("⚠️  Conexión perdida al enviar. Intentando reconectar...")
                 return False
 
@@ -81,10 +69,8 @@ def iniciar_sesion(sock):
 
             sock.sendall(msg.encode())
 
-    except KeyboardInterrupt:
-        return True   # Ctrl+C = salida voluntaria
-    except Exception:
-        return False  # error de red = reconectar
+    except KeyboardInterrupt: return True   # Ctrl+C = salida voluntaria
+    except Exception: return False  # error de red = reconectar
     finally:
         try:
             sock.shutdown(socket.SHUT_RDWR)
@@ -92,25 +78,18 @@ def iniciar_sesion(sock):
             pass
         sock.close()
 
-
-
 nombre = input("Escribe tu nombre: ").strip()
 if not nombre:
     print("❌ El nombre no puede estar vacío")
     raise SystemExit
-
 while True:
     sock = conectar(nombre)
 
-    if sock is None:
-        break   # agotó reintentos → salir
-
+    if sock is None: break  
     salida_voluntaria = iniciar_sesion(sock)
 
     if salida_voluntaria:
         print("👋 Hasta luego")
         break
-
-    # Si llegamos aquí es porque la conexión se cayó (no fue el usuario)
     print(f"🔁 Reconectando en {ESPERA_RECONEXION} segundos...")
     time.sleep(ESPERA_RECONEXION)
