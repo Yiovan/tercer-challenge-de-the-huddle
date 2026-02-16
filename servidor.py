@@ -13,7 +13,7 @@ def broadcast(mensaje, omitir=None):
         if conexion != omitir: 
             try:
                 conexion.sendall(mensaje_bytes)
-            except:
+            except (OSError, ConnectionResetError):  
                 with bloqueos:
                     if conexion in clientes:
                         del clientes[conexion]
@@ -60,6 +60,7 @@ def manejar_cliente(conexion, direccion):
             broadcast(f"🔴 {nombre_salir} ha salido")
 
         conexion.close()
+
 servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
 servidor.bind(('localhost', 8081))
